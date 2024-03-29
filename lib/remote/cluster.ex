@@ -3,7 +3,7 @@ defmodule Remote.Cluster do
     node_name = node()
 
     if node_name == :nonode@nohost do
-      raise("instance not a node")
+      raise("Instance is not a node")
     end
 
     cookie = Node.get_cookie()
