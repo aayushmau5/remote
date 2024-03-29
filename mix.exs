@@ -7,7 +7,11 @@ defmodule Remote.MixProject do
       version: "0.1.0",
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      escript: escript_config(),
+      default_task: "escript.build",
+      build_embedded: Mix.env() == :prod,
+      start_permanent: Mix.env() == :prod
     ]
   end
 
@@ -20,9 +24,10 @@ defmodule Remote.MixProject do
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do
-    [
-      # {:dep_from_hexpm, "~> 0.3.0"},
-      # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
-    ]
+    []
+  end
+
+  defp escript_config() do
+    [main_module: Remote.CLI]
   end
 end

@@ -24,3 +24,7 @@ remote-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+.lexical/
+.elixir_ls/
+remote
