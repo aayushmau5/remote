@@ -27,4 +27,4 @@ remote-*.tar
 
 .lexical/
 .elixir_ls/
-remote
+/remote
