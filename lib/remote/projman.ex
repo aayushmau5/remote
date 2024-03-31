@@ -6,7 +6,6 @@ defmodule Remote.Projman do
   import Prompt
 
   defstruct [:path, :name, :command, :editor]
-  # squid?
 
   # TODO: infer project name from path basename
   # TODO: input "." -> cwd in project path
@@ -55,12 +54,12 @@ defmodule Remote.Projman do
 
     selected_index = select("Open project:", choice_entries)
     project = Enum.at(entries, selected_index)
-    # TODO: add opening logic
 
     # TODO: perhaps use System.find_executable() first
     # System.shell("#{editor_command} #{project_path}")
     # TODO: how to execute cli based editor
     System.cmd(project.command, [project.path], stderr_to_stdout: true)
+
     display("Opening project: #{project.name}", color: :light_blue)
   end
 

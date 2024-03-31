@@ -26,7 +26,7 @@ defmodule Remote.MixProject do
   defp deps do
     [
       {:jason, "~> 1.4"},
-      {:prompt, "~> 0.10"}
+      {:prompt, github: "aayushmau5/prompt", branch: "default-answer-text"}
     ]
   end
 

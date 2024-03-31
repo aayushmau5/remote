@@ -1,17 +1,17 @@
 defmodule Remote.Cluster do
-  def connect(remote_node) do
-    node_name = node()
+  def make_self_node() do
+    {:ok, _} = Node.start(:remote, :shortnames)
 
-    if node_name == :nonode@nohost do
-      raise("Instance is not a node")
-    end
+    cookie = System.get_env("REMOTE_COOKIE") |> String.to_atom()
+    Node.set_cookie(node(), cookie)
+  end
 
-    cookie = Node.get_cookie()
-
-    if cookie == :nocookie do
-      raise("COOKIE not set for the node")
-    end
-
-    Node.connect(remote_node)
+  def connect_to_remote_node() do
+    # TODO: add nil check, and throw(or switch to local copy?) if remote connection failed
+    remote_node = System.get_env("REMOTE_REMOTE_NODE") |> String.to_atom()
+    IO.inspect(remote_node)
+    IO.inspect(node())
+    IO.inspect(Node.get_cookie())
+    IO.inspect(Node.connect(remote_node))
   end
 end

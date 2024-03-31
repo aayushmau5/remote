@@ -15,9 +15,19 @@ defmodule Remote.CLI do
   ]
 
   def main(argv) do
-    argv
-    |> parse_args
-    |> run()
+    args = parse_args(argv)
+
+    # Clustering
+    # let's make it a flag for "sync | pull"?
+    # TODO: async connect to remote node
+    # Cluster.make_self_node()
+    # Cluster.connect_to_remote_node()
+    # Prompt.display("Connected to remote node.", color: :green)
+    # IO.inspect(Node.list(), label: "list")
+    # IO.inspect(Node.list(:hidden), label: "hidden")
+
+    # Run the CLI
+    run(args)
   end
 
   defp run(params) do
