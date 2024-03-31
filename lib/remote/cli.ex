@@ -1,5 +1,5 @@
 defmodule Remote.CLI do
-  alias Remote.{Projman, Bin}
+  alias Remote.{Projman}
 
   @option_parser_opts [
     strict: [

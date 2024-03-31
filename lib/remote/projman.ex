@@ -2,8 +2,16 @@ defmodule Remote.Projman do
   @moduledoc """
   Projman - A project manager written in elixir.
   """
-  # what if we use sqlite?
-  # or clustered elixir(store in postgres?)
+
+  import Prompt
+
+  defstruct [:path, :name, :command, :editor]
+  # squid?
+
+  # TODO: infer project name from path basename
+  # TODO: input "." -> cwd in project path
+  # TODO: do something when there's no entry
+  # or clustered elixir(store in postgres?). if i use have, think about having a local cache for offline support.
   @entries_storage_path Path.join([System.user_home!(), ".config", "projman-config.json"])
 
   def run(command) do
@@ -18,23 +26,91 @@ defmodule Remote.Projman do
 
   def create_new_project_entry() do
     startup()
-    # List all the files
-    # or
+    name = get_project_name()
+    path = get_project_path()
+    editor = get_editor()
+    command = get_editor_command(editor)
+
+    project = %__MODULE__{name: name, path: path, command: command, editor: editor}
+
+    if entry_exists?(project) do
+      display("The project entry already exists.", color: :red)
+    else
+      save_entry(project)
+      display("The project entry added.", color: :green)
+    end
   end
 
   def list_all_entries() do
     startup()
 
-    json_entries = read_entries_store()
-    IO.inspect(json_entries)
+    entries = get_entries()
+
+    choice_entries =
+      entries
+      |> Enum.with_index()
+      |> Enum.map(fn {entry, index} ->
+        {"#{entry.name}\t#{entry.editor}\t#{entry.path}", index}
+      end)
+
+    selected_index = select("Open project:", choice_entries)
+    project = Enum.at(entries, selected_index)
+    # TODO: add opening logic
+
+    # TODO: perhaps use System.find_executable() first
+    # System.shell("#{editor_command} #{project_path}")
+    # TODO: how to execute cli based editor
+    System.cmd(project.command, [project.path], stderr_to_stdout: true)
+    display("Opening project: #{project.name}", color: :light_blue)
   end
 
   def update_entry() do
     startup()
+
+    entries = get_entries()
+
+    choice_entries =
+      entries
+      |> Enum.with_index()
+      |> Enum.map(fn {entry, index} ->
+        {"#{entry.name}\t#{entry.editor}\t#{entry.path}", index}
+      end)
+
+    selected_index = select("Update project:", choice_entries)
+    project = Enum.at(entries, selected_index)
+
+    name = get_project_name(default_answer: project.name)
+    path = get_project_path(default_answer: project.path)
+    display("(Default editor: #{project.editor})", color: :light_blue)
+    editor = get_editor()
+    command = get_editor_command(editor)
+
+    List.update_at(entries, selected_index, fn _ ->
+      %__MODULE__{name: name, path: path, editor: editor, command: command}
+    end)
+    |> save_entries()
+
+    display("Project entry updated.", color: :green)
   end
 
   def delete_entry() do
     startup()
+
+    entries = get_entries()
+
+    choice_entries =
+      entries
+      |> Enum.with_index()
+      |> Enum.map(fn {entry, index} ->
+        {"#{entry.name}\t#{entry.editor}\t#{entry.path}", index}
+      end)
+
+    selected_index = select("Delete project:", choice_entries)
+
+    List.delete_at(entries, selected_index)
+    |> save_entries()
+
+    display("Project entry deleted.", color: :red)
   end
 
   defp show_help() do
@@ -49,97 +125,119 @@ defmodule Remote.Projman do
     """)
   end
 
+  defp get_project_name(opts \\ []) do
+    default_answer = Keyword.get(opts, :default_answer, "")
+    min_length = if String.length(default_answer) == 0, do: 1, else: 0
+
+    case text("Project Name",
+           color: :light_blue,
+           min: min_length,
+           max: 128,
+           trim: true,
+           default_answer: default_answer
+         ) do
+      :error_min ->
+        display("Invalid project name.", color: :red)
+        get_project_name(opts)
+
+      :error_max ->
+        display("Project name too long.", color: :red)
+        get_project_name(opts)
+
+      "" ->
+        default_answer
+
+      val ->
+        val
+    end
+  end
+
+  defp get_project_path(opts \\ []) do
+    default_answer = Keyword.get(opts, :default_answer, "")
+    current_path = if String.length(default_answer) == 0, do: File.cwd!(), else: default_answer
+
+    case text("Project Path",
+           color: :light_blue,
+           max: 128,
+           trim: true,
+           default_answer: current_path
+         ) do
+      :error_min ->
+        display("Invalid project path.", color: :red)
+        get_project_path(opts)
+
+      :error_max ->
+        display("Project path too long.", color: :red)
+        get_project_path(opts)
+
+      "" ->
+        current_path
+
+      val ->
+        # TODO: use fixed path instead
+        # Path.expand(path)
+        val
+    end
+  end
+
+  defp get_editor() do
+    select("Editor", ["VSCode", "Zed", "Neovim"], color: :light_blue)
+  end
+
+  defp get_editor_command(editor) do
+    case editor do
+      "VSCode" -> "code"
+      "Zed" -> "zed"
+      "Neovim" -> "nvim"
+    end
+  end
+
+  # TODO: think about storing the data to postgres(through remote node)
+
   defp startup() do
     # Run the necessary step before a command
     check_or_create_entries_store()
   end
 
-  # TODO: think about storing the data to postgres(through remote node)
-
   defp check_or_create_entries_store() do
-    # TODO: think about the structure of storage
-    if not File.exists?(@entries_storage_path), do: File.write!(@entries_storage_path, "{}")
+    if not File.exists?(@entries_storage_path), do: reset_entries_store()
   end
 
-  defp write_to_entries_store(data), do: File.write!(@entries_storage_path, Jason.encode!(data))
+  defp entry_exists?(%__MODULE__{} = entry) do
+    entry =
+      get_entries()
+      |> Enum.find(fn project -> project == entry end)
+
+    if entry == nil, do: false, else: true
+  end
+
+  defp save_entries(entries) do
+    entries =
+      Enum.map(entries, fn entry -> [entry.name, entry.editor, entry.command, entry.path] end)
+
+    write_to_entries_store(entries)
+  end
+
+  defp save_entry(%__MODULE__{} = entry) do
+    # we are storing the data as [[name, editor, command, path]]
+    project_info = [entry.name, entry.editor, entry.command, entry.path]
+    entries = read_entries_store()
+    updated_entries = [project_info | entries]
+    write_to_entries_store(updated_entries)
+  end
+
+  defp get_entries() do
+    read_entries_store()
+    |> Enum.map(fn [name, editor, command, path] ->
+      %__MODULE__{name: name, path: path, editor: editor, command: command}
+    end)
+  end
+
+  defp write_to_entries_store(entries),
+    do: File.write!(@entries_storage_path, Jason.encode!(entries))
+
   defp read_entries_store(), do: File.read!(@entries_storage_path) |> Jason.decode!()
-  defp reset_entries_store(), do: File.write!(@entries_storage_path, "{}")
-
-  #   def add_project(project_path, project_name, editor_command) do
-  #     Config.check_config()
-  #     project_config_key = create_project_key(project_name, editor_command)
-
-  #     config_data = Config.get_config()
-
-  #     if record_exists?(config_data, project_config_key) do
-  #       IO.ANSI.format([:red, "The project entry already exists"]) |> IO.puts()
-  #     else
-  #       project_config_data = %{
-  #         project_path: project_path,
-  #         project_name: project_name,
-  #         editor_command: editor_command
-  #       }
-
-  #       config_data = update_config(config_data, project_config_key, project_config_data)
-  #       Config.write_config(config_data)
-
-  #       IO.ANSI.format([:green, "Project entry added"]) |> IO.puts()
-  #     end
-  #   end
-
-  #   def list_projects() do
-  #     Config.get_config()
-  #     |> Enum.map(fn {k, v} ->
-  #       Map.put(v, "id", k)
-  #     end)
-  #   end
-
-  #   def open_project(project) do
-  #     project_path = project["project_path"]
-  #     editor_command = project["editor_command"]
-  #     # TODO: perhaps use System.find_executable() first
-  #     # TODO: how to execute cli based editor
-  #     # System.shell("#{editor_command} #{project_path}")
-  #     System.cmd(editor_command, [project_path], stderr_to_stdout: true)
-  #   end
-
-  #   def update_project(key, project_data) do
-  #     Config.get_config() |> Map.put(key, project_data) |> Config.write_config()
-  #   end
-
-  #   def delete_project(project) do
-  #     Config.get_config() |> Map.delete(project["id"]) |> Config.write_config()
-  #   end
-
-  #   defp create_project_key(project_name, editor_command) do
-  #     project_name = String.downcase(project_name) |> String.replace(~r/\s/, "-")
-  #     editor_command = String.downcase(editor_command)
-  #     "#{project_name}-#{editor_command}"
-  #   end
-
-  #   defp record_exists?(config, key) do
-  #     case Map.fetch(config, key) do
-  #       {:ok, _} -> true
-  #       :error -> false
-  #     end
-  #   end
-
-  #   defp update_config(config, key, value) do
-  #     Map.put(config, key, value)
-  #   end
-  # end
-
-  # defmodule Config do
-  #   @config_file_path Path.join([System.user_home!(), ".config", "projman-config.json"])
-
-  #   def check_config() do
-  #     if not File.exists?(@config_file_path), do: File.write!(@config_file_path, "{}")
-  #   end
-
-  #   def write_config(data), do: File.write!(@config_file_path, Jason.encode!(data))
-  #   def get_config(), do: File.read!(@config_file_path) |> Jason.decode!()
-  #   def reset_config(), do: File.write!(@config_file_path, "{}")
-  # end
+  defp reset_entries_store(), do: File.write!(@entries_storage_path, "[]")
 
   # defmodule Shell do
   #   def run() do
@@ -284,24 +382,5 @@ defmodule Remote.Projman do
   #   def handle_command(_) do
   #     IO.ANSI.format([:red, "Invalid command. Please try again."]) |> IO.puts()
   #     run()
-  #   end
-
-  #   defp get_value_without_newline(input, default) do
-  #     input = String.trim(input)
-
-  #     if String.length(input) > 0 do
-  #       input
-  #     else
-  #       default
-  #     end
-  #   end
-
-  #   defp list_projects_with_number(projects) do
-  #     Enum.reduce(projects, {1, ""}, fn project, {project_index, output_string} ->
-  #       project_output =
-  #         "#{project_index}. #{project["project_name"]} - #{project["project_path"]} - #{project["editor_command"]}\n"
-
-  #       {project_index + 1, output_string <> project_output}
-  #     end)
   #   end
 end
