@@ -1,16 +1,15 @@
 defmodule Remote.Projman do
   @moduledoc """
-  Projman - A project manager written in elixir.
+  Projman - A project manager
   """
 
   import Prompt
 
   defstruct [:path, :name, :command, :editor]
 
-  # TODO: infer project name from path basename
-  # TODO: input "." -> cwd in project path
   # TODO: do something when there's no entry
-  # or clustered elixir(store in postgres?). if i use have, think about having a local cache for offline support.
+  # TODO: think about storing the data to postgres(through remote node)
+  # or clustered elixir(store in postgres?). if we use this, think about having a local cache for offline support.
   @entries_storage_path Path.join([System.user_home!(), ".config", "projman-config.json"])
 
   def run(command) do
@@ -125,7 +124,7 @@ defmodule Remote.Projman do
   end
 
   defp get_project_name(opts \\ []) do
-    default_answer = Keyword.get(opts, :default_answer, "")
+    default_answer = Keyword.get(opts, :default_answer, Path.basename(File.cwd!()))
     min_length = if String.length(default_answer) == 0, do: 1, else: 0
 
     case text("Project Name",
@@ -173,9 +172,7 @@ defmodule Remote.Projman do
         current_path
 
       val ->
-        # TODO: use fixed path instead
-        # Path.expand(path)
-        val
+        Path.expand(val)
     end
   end
 
@@ -190,8 +187,6 @@ defmodule Remote.Projman do
       "Neovim" -> "nvim"
     end
   end
-
-  # TODO: think about storing the data to postgres(through remote node)
 
   defp startup() do
     # Run the necessary step before a command
@@ -237,149 +232,4 @@ defmodule Remote.Projman do
 
   defp read_entries_store(), do: File.read!(@entries_storage_path) |> Jason.decode!()
   defp reset_entries_store(), do: File.write!(@entries_storage_path, "[]")
-
-  # defmodule Shell do
-  #   def run() do
-  #     IO.puts("""
-  #     l - List all projects
-  #     n - Create a new entry
-  #     d - Delete an entry
-  #     m - Modify an entry
-  #     r - Reset the config
-  #     q - Quit
-  #     """)
-
-  #     # IO.getn() doesn't work for some reason
-  #     IO.gets("> ") |> String.trim() |> handle_command()
-  #   end
-
-  #   def handle_command("l") do
-  #     projects = list_projects()
-
-  #     {_, projects_list_string} = list_projects_with_number(projects)
-  #     IO.puts(projects_list_string)
-
-  #     selected_project_index =
-  #       IO.gets("Select the project number > ") |> String.trim() |> String.to_integer()
-
-  #     selected_project = Enum.at(projects, selected_project_index - 1)
-
-  #     IO.ANSI.format([:yellow, "Opening project"]) |> IO.puts()
-
-  #     open_project(selected_project)
-  #   end
-
-  #   def handle_command("n") do
-  #     IO.ANSI.format([:blue_background, "Create a new project entry"]) |> IO.puts()
-
-  #     # TODO: perhaps sanitize project name?
-  #     # TODO: add relative paths
-  #     project_path =
-  #       IO.gets(
-  #         "What will be the path to the project?(Just press enter for current working directory path)\n> "
-  #       )
-  #       |> get_value_without_newline(File.cwd!())
-
-  #     project_name =
-  #       IO.gets(
-  #         "What will be the name of the project?(Just press enter for selected directory)\n> "
-  #       )
-  #       |> get_value_without_newline(Path.basename(project_path))
-
-  #     IO.puts("""
-  #     Which editor do you want to open the project in?(Default: VSCode)
-  #     - VSCode(type: code)
-  #     - Vim(type: vim)
-  #     - Neovim(type: nvim)
-  #     - Atom(type: atom)
-  #     - Add your own? Type the command
-  #     """)
-
-  #     # TODO: validate editor_command input
-  #     editor_command =
-  #       IO.gets("> ")
-  #       |> get_value_without_newline("code")
-
-  #     add_project(project_path, project_name, editor_command)
-  #   end
-
-  #   def handle_command("d") do
-  #     projects = list_projects()
-
-  #     {_, projects_list} = list_projects_with_number(projects)
-  #     IO.puts(projects_list)
-
-  #     selected_project_index =
-  #       IO.gets("Select the project number which you want to delete > ")
-  #       |> String.trim()
-  #       |> String.to_integer()
-
-  #     selected_project = Enum.at(projects, selected_project_index - 1)
-
-  #     IO.ANSI.format([:red, "Deleting project"]) |> IO.puts()
-  #     delete_project(selected_project)
-  #   end
-
-  #   def handle_command("m") do
-  #     projects = Projman.list_projects()
-
-  #     {_, projects_list} = list_projects_with_number(projects)
-  #     IO.puts(projects_list)
-
-  #     selected_project_index =
-  #       IO.gets("Select the project number which you want to update > ")
-  #       |> String.trim()
-  #       |> String.to_integer()
-
-  #     selected_project = Enum.at(projects, selected_project_index - 1)
-
-  #     project_path =
-  #       IO.gets(
-  #         "What will be the path to the project?(Current Value: #{selected_project["project_path"]})\n> "
-  #       )
-  #       |> get_value_without_newline(selected_project["project_path"])
-
-  #     project_name =
-  #       IO.gets(
-  #         "What will be the name of the project?(Current Value: #{selected_project["project_name"]})\n> "
-  #       )
-  #       |> get_value_without_newline(selected_project["project_name"])
-
-  #     IO.puts("""
-  #     Which editor do you want to open the project in?(Current Value: #{selected_project["editor_command"]})
-  #     - VSCode(type: code)
-  #     - Vim(type: vim)
-  #     - Neovim(type: nvim)
-  #     - Atom(type: atom)
-  #     - Add your own? Type the command
-  #     """)
-
-  #     # TODO: validate editor_command input
-  #     editor_command =
-  #       IO.gets("> ")
-  #       |> get_value_without_newline(selected_project["editor_command"])
-
-  #     update_project(
-  #       selected_project["id"],
-  #       %{
-  #         project_path: project_path,
-  #         project_name: project_name,
-  #         editor_command: editor_command
-  #       }
-  #     )
-  #   end
-
-  #   def handle_command("r") do
-  #     IO.ANSI.format([:red, "Removing project entries"]) |> IO.puts()
-  #     Config.reset_config()
-  #   end
-
-  #   def handle_command("q") do
-  #     IO.ANSI.format([:green, "Goodbye"]) |> IO.puts()
-  #   end
-
-  #   def handle_command(_) do
-  #     IO.ANSI.format([:red, "Invalid command. Please try again."]) |> IO.puts()
-  #     run()
-  #   end
 end
